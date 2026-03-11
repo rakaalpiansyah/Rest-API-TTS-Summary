@@ -33,7 +33,7 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="""
-## Meeting AI Backend
+## Meeting AI Backend Vcols
 Backend untuk aplikasi perekam dan analisis rapat otomatis berbasis AI.
 
 ### Fitur:

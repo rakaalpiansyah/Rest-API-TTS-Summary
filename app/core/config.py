@@ -9,7 +9,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────
-    app_name: str = "Meeting AI Backend Vcols"
+    app_name: str = "Meeting AI Vcols"
     app_version: str = "1.0.0"
     debug: bool = False
     secret_key: str = "changeme"
