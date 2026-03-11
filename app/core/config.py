@@ -9,14 +9,14 @@ from typing import List
 
 class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────
-    app_name: str = "Meeting AI Vcols"
+    app_name: str = "FastAPI Vcols"
     app_version: str = "1.0.0"
     debug: bool = False
-    secret_key: str = "changeme"
+    api_keys: str = ""  # comma-separated, API keys untuk autentikasi client
 
     # ── AI ───────────────────────────────────────────────────
     gemini_api_key: str
-    whisper_model_size: str = "base"  # tiny/base/small/medium/large
+    groq_api_key: str  # Groq Cloud API key untuk Whisper STT
 
     # ── Supabase ─────────────────────────────────────────────
     supabase_url: str
@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # ── CORS ─────────────────────────────────────────────────
     frontend_url: str = "http://localhost:5173"
     allowed_origins: str = ""  # comma-separated, isi saat production
+
+    def get_api_keys(self) -> List[str]:
+        """Parse comma-separated API keys dari env."""
+        if not self.api_keys:
+            return []
+        return [k.strip() for k in self.api_keys.split(",") if k.strip()]
 
     def get_allowed_origins(self) -> List[str]:
         """

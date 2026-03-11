@@ -2,9 +2,10 @@
 WebSocket Endpoint — Kumpulkan SEMUA audio, proses saat stop.
 WebM stream harus utuh dari awal — tidak bisa diproses per chunk.
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.services.whisper_service import WhisperService
 from app.services.supabase_service import SupabaseService
+from app.core.config import get_settings
 import logging
 import json
 
@@ -13,7 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 @router.websocket("/ws/transcribe/{meeting_id}")
-async def websocket_transcribe(websocket: WebSocket, meeting_id: str):
+async def websocket_transcribe(
+    websocket: WebSocket,
+    meeting_id: str,
+    api_key: str = Query(..., alias="api_key"),
+):
+    # ── Verifikasi API Key ──
+    settings = get_settings()
+    valid_keys = settings.get_api_keys()
+    if api_key not in valid_keys:
+        await websocket.close(code=4003, reason="API key tidak valid.")
+        return
+
     await websocket.accept()
     logger.info(f"WebSocket connected: meeting_id={meeting_id}")
 

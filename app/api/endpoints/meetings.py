@@ -3,7 +3,7 @@ Meeting Endpoints — REST API untuk operasi rapat.
 WebSocket handles real-time audio.
 REST API handles: buat rapat, finish + analisis, ambil history, hapus.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from app.schemas.meeting import (
     MeetingCreateRequest,
@@ -15,10 +15,11 @@ from app.schemas.meeting import (
 )
 from app.services.ai_service import AIService
 from app.services.supabase_service import SupabaseService
+from app.core.auth import verify_api_key
 from datetime import datetime
 import logging
 
-router = APIRouter(prefix="/meetings", tags=["Meetings"])
+router = APIRouter(prefix="/meetings", tags=["Meetings"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
 
 

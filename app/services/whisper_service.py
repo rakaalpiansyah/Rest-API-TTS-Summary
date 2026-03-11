@@ -1,36 +1,22 @@
 """
 Whisper Service — "Telinga" AI.
-Menggunakan faster-whisper (lebih stabil di Windows, lebih cepat 4x).
-Model di-load sekali saat startup agar tidak reload tiap request.
-
-Fix: Browser mengirim WebM chunk tanpa header lengkap.
-Solusi: Kumpulkan semua chunk, gabung, lalu konversi ke WAV pakai ffmpeg subprocess.
+Menggunakan Groq Cloud API (whisper-large-v3-turbo) untuk speech-to-text.
+Audio dikirim via HTTP ke server Groq — tidak perlu load model lokal.
+Keuntungan: RAM server aman, kecepatan <1 detik, akurasi tinggi.
 """
-from faster_whisper import WhisperModel
+import httpx
 import tempfile
 import os
-import subprocess
 import logging
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_MODEL = "whisper-large-v3-turbo"
+
 
 class WhisperService:
-    _model = None
-
-    @classmethod
-    def load_model(cls):
-        settings = get_settings()
-        if cls._model is None:
-            logger.info(f"Loading Whisper model: {settings.whisper_model_size}...")
-            cls._model = WhisperModel(
-                settings.whisper_model_size,
-                device="cpu",
-                compute_type="int8",
-            )
-            logger.info("Whisper model loaded successfully ✓")
-        return cls._model
 
     @classmethod
     async def transcribe_audio_chunk(
@@ -40,63 +26,60 @@ class WhisperService:
     ) -> str:
         """
         Terima bytes audio dari WebSocket (WebM/Opus).
-        Konversi ke WAV dulu via ffmpeg, baru transkripsi.
+        Kirim langsung ke Groq API — tidak perlu konversi format.
         """
-        model = cls._model
-        if model is None:
-            raise RuntimeError("Whisper model belum di-load.")
-
-        webm_path = None
-        wav_path = None
+        settings = get_settings()
+        tmp_path = None
 
         try:
-            # 1. Simpan bytes WebM ke file temp
+            # 1. Simpan bytes ke file temp (Groq API butuh file upload)
             with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
                 f.write(audio_bytes)
-                webm_path = f.name
+                tmp_path = f.name
 
-            # 2. Konversi WebM → WAV pakai ffmpeg
-            wav_path = webm_path.replace(".webm", ".wav")
-            result = subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-i", webm_path,
-                    "-ar", "16000",   # Sample rate 16kHz (optimal untuk Whisper)
-                    "-ac", "1",       # Mono channel
-                    "-f", "wav",
-                    wav_path,
-                ],
-                capture_output=True,
-                text=True,
-            )
+            # 2. Kirim ke Groq Whisper API
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                with open(tmp_path, "rb") as audio_file:
+                    response = await client.post(
+                        GROQ_TRANSCRIPTION_URL,
+                        headers={
+                            "Authorization": f"Bearer {settings.groq_api_key}",
+                        },
+                        files={
+                            "file": ("audio.webm", audio_file, "audio/webm"),
+                        },
+                        data={
+                            "model": GROQ_MODEL,
+                            "language": language,
+                            "response_format": "text",
+                        },
+                    )
 
-            if result.returncode != 0:
-                logger.error(f"FFmpeg error: {result.stderr}")
-                raise RuntimeError(f"FFmpeg konversi gagal: {result.stderr[-200:]}")
+            if response.status_code != 200:
+                error_detail = response.text[:300]
+                logger.error(f"Groq API error {response.status_code}: {error_detail}")
+                raise RuntimeError(
+                    f"Groq transcription gagal (HTTP {response.status_code}): {error_detail}"
+                )
 
-            # 3. Transkripsi WAV dengan faster-whisper
-            segments, info = model.transcribe(
-                wav_path,
-                language=language,
-                task="transcribe",
-                beam_size=5,
-                vad_filter=True,  # Skip bagian sunyi otomatis
-            )
-            transcript = " ".join(seg.text.strip() for seg in segments)
-            logger.debug(f"Transcribed ({info.language}): {transcript[:60]}...")
+            transcript = response.text.strip()
+            logger.debug(f"Transcribed via Groq: {transcript[:60]}...")
             return transcript
+
+        except httpx.TimeoutException:
+            logger.error("Groq API timeout — audio terlalu besar atau koneksi lambat")
+            raise RuntimeError("Groq API timeout. Coba lagi nanti.")
 
         except Exception as e:
             logger.error(f"Whisper transcription error: {e}")
             raise
 
         finally:
-            for path in [webm_path, wav_path]:
-                if path and os.path.exists(path):
-                    try:
-                        os.unlink(path)
-                    except Exception:
-                        pass
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
 
     @classmethod
     async def transcribe_full_audio(cls, audio_bytes: bytes, language: str = "id") -> str:

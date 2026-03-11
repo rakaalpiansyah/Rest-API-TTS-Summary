@@ -148,7 +148,7 @@
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:1rem">
-      <span class="version-badge">v2.1.0</span>
+      <span class="version-badge">v3.0.0 — Groq</span>
       <div class="status-bar">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText" style="color:var(--muted)">Offline</span>
@@ -164,6 +164,10 @@
     <div class="field" style="max-width:320px">
       <label>👤 User ID</label>
       <input type="text" id="userId" value="00000000-0000-0000-0000-000000000001">
+    </div>
+    <div class="field" style="max-width:280px">
+      <label>🔑 API Key</label>
+      <input type="text" id="apiKey" value="vcols-api-key-2024" placeholder="Masukkan API Key">
     </div>
     <button class="btn btn-secondary" onclick="checkHealth()">⚡ Check Health</button>
   </div>
@@ -184,7 +188,7 @@
       <div class="response-box muted" id="healthResponse">// Klik "Run Health Check" untuk mulai...</div>
     </div>
     <div class="stats-row" id="statsRow" style="display:none">
-      <div class="stat-card"><span class="stat-value" id="statWhisper">—</span><span class="stat-label">Whisper</span></div>
+      <div class="stat-card"><span class="stat-value" id="statWhisper">—</span><span class="stat-label">Whisper (Groq)</span></div>
       <div class="stat-card"><span class="stat-value" id="statAI">—</span><span class="stat-label">AI (LLM)</span></div>
       <div class="stat-card"><span class="stat-value" id="statSupabase">—</span><span class="stat-label">Supabase</span></div>
     </div>
@@ -289,7 +293,7 @@
         <button class="btn btn-secondary" onclick="clearLogs()" style="padding:0.3rem 0.8rem;font-size:0.75rem">Clear</button>
       </div>
       <div class="response-box" id="logsBox" style="color:var(--text);max-height:500px">
-        <div class="log-entry"><span class="log-time">[init]</span><span class="log-msg info">Meeting AI Tester v2.1 siap.</span></div>
+        <div class="log-entry"><span class="log-time">[init]</span><span class="log-msg info">Meeting AI Tester v3.0 siap (Groq Whisper API).</span></div>
       </div>
     </div>
   </div>
@@ -332,6 +336,8 @@
 
   const getUrl = () => document.getElementById('backendUrl').value.replace(/\/$/, '');
   const getUserId = () => document.getElementById('userId').value;
+  const getApiKey = () => document.getElementById('apiKey').value;
+  const authHeaders = () => ({ 'Content-Type': 'application/json', 'X-API-Key': getApiKey() });
 
   // ── Audio Mode ──
   function selectMode(mode) {
@@ -414,8 +420,8 @@
       const data = await res.json();
       box.className = 'response-box'; box.textContent = JSON.stringify(data, null, 2);
       document.getElementById('statsRow').style.display = 'flex';
-      document.getElementById('statWhisper').textContent = data.services?.whisper === 'loaded' ? '✅' : '❌';
-      document.getElementById('statAI').textContent = data.services?.gemini === 'configured' ? '✅' : '❌';
+      document.getElementById('statWhisper').textContent = data.services?.whisper === 'groq_api' ? '✅' : '❌';
+      document.getElementById('statAI').textContent = data.services?.ai === 'configured' ? '✅' : '❌';
       document.getElementById('statSupabase').textContent = data.services?.supabase === 'configured' ? '✅' : '❌';
       setStatus('online', 'Online'); log('Health OK', 'success');
     } catch (e) {
@@ -431,7 +437,7 @@
     document.getElementById('createBtn').disabled = true;
     try {
       const res = await fetch(getUrl() + '/api/v1/meetings/', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ title, user_id: getUserId() })
       });
       const data = await res.json();
@@ -459,7 +465,7 @@
       log('Meminta akses audio mode: ' + audioMode + '...', 'info');
       const stream = await getAudioStream();
 
-      const wsUrl = getUrl().replace('http','ws') + '/api/v1/ws/transcribe/' + currentMeetingId;
+      const wsUrl = getUrl().replace('http','ws') + '/api/v1/ws/transcribe/' + currentMeetingId + '?api_key=' + encodeURIComponent(getApiKey());
       ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         log('WebSocket connected ✓', 'success');
@@ -529,7 +535,7 @@
     log('Mengirim transkrip ke AI...', 'info');
     try {
       const res = await fetch(getUrl() + '/api/v1/meetings/' + currentMeetingId + '/finish', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ meeting_id: currentMeetingId, full_transcript: fullTranscript.trim() })
       });
       const data = await res.json();
@@ -567,7 +573,9 @@
     const list = document.getElementById('historyList');
     list.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);font-family:var(--mono)">⏳ Loading...</div>';
     try {
-      const res = await fetch(getUrl() + '/api/v1/meetings/user/' + getUserId());
+      const res = await fetch(getUrl() + '/api/v1/meetings/user/' + getUserId(), {
+        headers: { 'X-API-Key': getApiKey() }
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(JSON.stringify(data));
       document.getElementById('historyCount').textContent = data.length + ' rapat';
@@ -596,7 +604,10 @@
     if (!confirm('Hapus rapat ini?')) return;
     btn.disabled = true; btn.textContent = '⏳';
     try {
-      const res = await fetch(getUrl() + '/api/v1/meetings/' + id + '?user_id=' + getUserId(), { method: 'DELETE' });
+      const res = await fetch(getUrl() + '/api/v1/meetings/' + id + '?user_id=' + getUserId(), {
+        method: 'DELETE',
+        headers: { 'X-API-Key': getApiKey() }
+      });
       if (!res.ok) throw new Error('Gagal');
       btn.closest('.history-card').remove();
       document.getElementById('historyCount').textContent = document.querySelectorAll('.history-card').length + ' rapat';
@@ -612,7 +623,9 @@
     document.getElementById('modalMeta').textContent = '';
     hideDeleteConfirm();
     try {
-      const res = await fetch(getUrl() + '/api/v1/meetings/' + id);
+      const res = await fetch(getUrl() + '/api/v1/meetings/' + id, {
+        headers: { 'X-API-Key': getApiKey() }
+      });
       const d = await res.json();
       if (!res.ok) throw new Error(JSON.stringify(d));
       document.getElementById('modalTitle').textContent = d.title;
@@ -638,7 +651,10 @@
   async function doDelete() {
     if (!currentDetailId) return;
     try {
-      const res = await fetch(getUrl() + '/api/v1/meetings/' + currentDetailId + '?user_id=' + getUserId(), { method: 'DELETE' });
+      const res = await fetch(getUrl() + '/api/v1/meetings/' + currentDetailId + '?user_id=' + getUserId(), {
+        method: 'DELETE',
+        headers: { 'X-API-Key': getApiKey() }
+      });
       if (!res.ok) throw new Error('Gagal hapus');
       log('Dihapus: ' + currentDetailId, 'success');
       closeModal(); loadHistory();

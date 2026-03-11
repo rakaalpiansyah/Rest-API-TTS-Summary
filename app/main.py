@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.api.endpoints import meetings, websocket, health
-from app.services.whisper_service import WhisperService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,8 +20,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Meeting AI Backend...")
-    WhisperService.load_model()
-    logger.info("✅ Backend siap menerima request.")
+    logger.info("✅ Backend siap menerima request (Groq Whisper API mode).")
     yield
     logger.info("⛔ Shutting down Meeting AI Backend...")
 
@@ -33,18 +31,18 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="""
-## Meeting AI Backend Vcols
+## Meeting AI Vcols
 Backend untuk aplikasi perekam dan analisis rapat otomatis berbasis AI.
 
 ### Fitur:
-- 🎙️ **Real-time transcription** via WebSocket + Whisper AI
-- 🧠 **Meeting analysis** via Groq LLM (summary + action items + rekomendasi strategis)
+- 🎙️ **Real-time transcription** via WebSocket + Groq Whisper API
+- 🧠 **Meeting analysis** via AI LLM (summary + action items + rekomendasi strategis)
 - 💾 **Persistent storage** via Supabase
-- 🌐 **Multi-language** — output AI mengikuti bahasa transkrip (Indonesia/English)
+- 🔐 **API Key auth** — semua endpoint (kecuali `/health`) dilindungi `X-API-Key`
 
 ### Cara Pakai:
 1. `POST /api/v1/meetings/` — buat sesi rapat baru, dapat `meeting_id`
-2. `WS /api/v1/ws/transcribe/{meeting_id}` — stream audio real-time
+2. `WS /api/v1/ws/transcribe/{meeting_id}?api_key=KEY` — stream audio real-time
 3. `POST /api/v1/meetings/{id}/finish` — kirim transkrip, dapatkan analisis AI
 4. `GET /api/v1/meetings/user/{user_id}` — ambil history rapat per user
     """,
