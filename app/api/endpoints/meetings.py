@@ -4,6 +4,7 @@ WebSocket handles real-time audio.
 REST API handles: buat rapat, finish + analisis, ambil history, hapus.
 """
 from fastapi import APIRouter, HTTPException, status
+from typing import List
 from app.schemas.meeting import (
     MeetingCreateRequest,
     MeetingFinishRequest,
@@ -81,6 +82,7 @@ async def finish_meeting(meeting_id: str, payload: MeetingFinishRequest):
         full_transcript=payload.full_transcript,
         summary=analysis["summary"],
         action_items=analysis["action_items"],
+        recommendations=analysis.get("recommendations", []),
     )
 
     return MeetingResultResponse(
@@ -94,7 +96,7 @@ async def finish_meeting(meeting_id: str, payload: MeetingFinishRequest):
     )
 
 
-@router.get("/user/{user_id}", response_model=list[MeetingListItem])
+@router.get("/user/{user_id}", response_model=List[MeetingListItem])
 async def get_user_meetings(user_id: str):
     """
     Ambil semua rapat milik user — untuk halaman history.
